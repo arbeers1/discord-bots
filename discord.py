@@ -89,7 +89,7 @@ class Discord:
         
         #Exchange hearbeats with server
         '''
-        response = json.loads(ws.recv())
+        response = json.loads(ws.recv()
         self.heartbeat_interval = response['d']['heartbeat_interval']
         s = response['s']
         timer_start = datetime.datetime.now()
