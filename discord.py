@@ -1,7 +1,10 @@
-import datetime
 import websocket
+import threading
+import datetime
 import requests
+import signal
 import json
+import sys
 
 class Discord:
 
@@ -11,6 +14,7 @@ class Discord:
         self.bot_name = bot_name
         self.token = token
         self.heartbeat_interval = -1
+        self.ws = None
         websocket.enableTrace(True)
 
     def __request(self, type, url, endpoint, payload, headers):
@@ -60,17 +64,21 @@ class Discord:
         print('Connection closed with code: {}. Close message: {}'.format(close_status_code, close_msg))
 
     def __message_recieved(self, ws, message):
-        response = json.loads(message)
-        if response['op'] == 10:
-            self.heartbeat_interval = response['d']['heartbeat_interval']
-            s = response['s']
-            #TODO: START HEARTBEATING
-        elif response['op'] == 11: pass #Acknowledgment code after heartbeat is sent. No action required.
-        elif response['t'] == 'READY': print(self.bot_name + ' is now online.') 
+        def run(*args):
+            response = json.loads(message)
+            if response['op'] == 10:
+                self.heartbeat_interval = response['d']['heartbeat_interval']
+                s = response['s']
+                #TODO: START HEARTBEATING
+            elif response['op'] == 11: pass #Acknowledgment code after heartbeat is sent. No action required.
+            elif response['t'] == 'READY': print(self.bot_name + ' is now online.')
 
+        #View message on seperate thread 
+        threading.Thread(target=run).start()
 
     def __error_recieved(self, ws, error):
-        print('ERROR ' + str(error))
+        if(len(str(error)) != 0):
+            print('ERROR ' + str(error) + '.')
 
     def open_connection(self):
         #Get gateway
@@ -78,14 +86,12 @@ class Discord:
         response = self.__request('get', Discord.API_URL, '/gateway/bot', None, headers)
 
         #Open websocket connection
-        ws = websocket.WebSocketApp(response['url'], 
-                                    on_open=self.__connection_opened, 
-                                    on_close=self.__connection_closed, 
-                                    on_message=self.__message_recieved, 
-                                    on_error=self.__error_recieved)
-        try:
-            ws.run_forever()
-        except KeyboardInterrupt: print('here')
+        self.ws = websocket.WebSocketApp(response['url'], 
+                                        on_open=self.__connection_opened, 
+                                        on_close=self.__connection_closed, 
+                                        on_message=self.__message_recieved, 
+                                        on_error=self.__error_recieved)
+        self.ws.run_forever()
         
         #Exchange hearbeats with server
         '''
@@ -106,7 +112,6 @@ class Discord:
                 #reset time
                 time_start = datetime.datetime.now()
             '''
-
-
-
+    def close_connection(self):
+        self.ws.close()
     
