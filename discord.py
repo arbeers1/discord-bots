@@ -3,7 +3,6 @@ import websocket
 import threading
 import requests
 import json
-import sys
 
 class http:
     def request(type, url, endpoint, payload, headers):
@@ -74,7 +73,7 @@ class Discord:
                         'type': 4
                     }]
                 },
-                'intents': 513 # 1 << 9 (Guild Messages), 1 << 0 (Guilds)
+                'intents': 129 #1 << 0 (Guilds) 1 << 7 (Voice State Update)
             }
         }
         payload = json.dumps(identity)
@@ -99,9 +98,11 @@ class Discord:
                 print(self.bot_name + ' is now online.') 
             elif response['t'] == 'GUILD_CREATE': # Case where guild information is recieved. A guild object is created
                 if response['d']['id'] not in self.guilds:
-                    self.guilds[response['d']['id']] = Guild(response['d']['id'], self.token)
+                    self.guilds[response['d']['id']] = Guild(response['d']['id'], self.token, response)
             elif response['t'] == 'INTERACTION_CREATE': #Case if a slash method is called by a user
                 self.commands[response['d']['data']['name']](response) #Call the func ptr of the named command
+            elif response['t'] == 'VOICE_STATE_UPDATE': #Case if a user joins/leaves voice channel
+                self.guilds[response['d']['guild_id']].update_user(response)
         threading.Thread(target=run).start() #Respond to events on seperate thread to handle mutliple with extended queue times.
 
     def open_connection(self):
@@ -166,15 +167,30 @@ class Discord:
 
             http.request('patch', Discord.API_URL, endpoint, msg_data, headers)
         threading.Thread(target=run).start()
-        
 
+    def user_connected(self, guild_id, user_id):
+        users = self.guilds[guild_id].users_connected
+        if user_id not in users:
+            return False
+        else:
+            return users[user_id]
+        
 class Guild:
 
-    def __init__(self, id, bot_token):
+    def __init__(self, id, bot_token, guild_create):
+        '''Param guild_create = json given on the GUILD_CREATE event by discord'''
         self.id = id
 
-        #Save guild members for quick refrence in future
-        #headers = {'Authorization': 'Bot ' + bot_token}
-        #response = http.request('get', Discord.API_URL, '/guilds/{}/members'.format(id), None, headers)
-        #print(response)
-        #exit(0)
+        self.users_connected = {}
+        for user in guild_create['d']['voice_states']:
+            self.users_connected[user['user_id']] = True
+
+    def update_user(self, response):
+        '''Sets a users status to True/False (online/offline)'''
+        user_id = response['d']['member']['user']['id']
+        channel = response['d']['channel_id']
+
+        if channel == None:
+            self.users_connected[user_id] = False
+        else:
+            self.users_connected[user_id] = True

@@ -34,6 +34,7 @@ def init_vote(interaction):
     kick_nick = interaction['d']['data']['resolved']['members'][kick_user_id]['nick']
     kick_user = kick_nick if kick_nick != None else interaction['d']['data']['resolved']['users'][kick_user_id]['username']
     kick_initiator = interaction['d']['member']['nick'] if  interaction['d']['member']['nick'] != None else interaction['d']['member']['user']['username']
+    #discord.guild(interaction['d']['guild_id'], kick_user_id)
 
     guild = interaction['d']['guild_id']
     guild_votes[guild]['vote_in_progress'] = True
@@ -66,10 +67,16 @@ def update_vote_count_display(interaction):
 
 @discord.command(name='votekick', desc='Initiates a votekick for the given user', params={'name': 'user', 'description': 'user to kick', 'type': 6, 'required': True})
 def kick(interaction):
-    if not interaction['d']['guild_id'] in guild_votes:
-        guild_votes[interaction['d']['guild_id']] = vote.copy()
+    guild = interaction['d']['guild_id']
+    kick_user = interaction['d']['data']['options'][0]['value']
+
+    if  not discord.user_connected(guild, kick_user):
+        message = 'Failed to start votekick. User not in server.'
+        discord.reply(interaction, message, secret_reply=True)
+    elif not guild in guild_votes:
+        guild_votes[guild] = vote.copy()
         init_vote(interaction)
-    elif guild_votes[interaction['d']['guild_id']]['vote_in_progress'] == False:
+    elif guild_votes[guild]['vote_in_progress'] == False:
         init_vote(interaction)
     else:
         message = 'Vote already in progress. Wait until the current vote has ended.'
