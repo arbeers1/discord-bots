@@ -1,4 +1,5 @@
 from msvcrt import kbhit
+import datetime
 import os
 import sys
 sys.path.append(sys.path[0].replace('F1 To Kick', ''))
@@ -20,12 +21,16 @@ vote = {
 guild_votes = {}
 
 def init_vote(interaction):
-    kick_user = interaction['d']['data']['options'][0]['value']
-    kick_user = interaction['d']['data']['resolved']['users'][kick_user]['username']
-    kick_initiator = interaction['d']['member']['user']['username']
+    kick_user_id = interaction['d']['data']['options'][0]['value']
+    kick_nick = interaction['d']['data']['resolved']['members'][kick_user_id]['nick']
+    kick_user = kick_nick if kick_nick != None else interaction['d']['data']['resolved']['users'][kick_user_id]['username']
+    kick_initiator = interaction['d']['member']['nick'] if  interaction['d']['member']['nick'] != None else interaction['d']['member']['user']['username']
+
     guild_votes[interaction['d']['guild_id']]['vote_in_progress'] = True
 
-    message = 'Vote by: {}\r\n**Kick user:\r\n{}?**\r\n:white_check_mark:: 0\r\n❌: 0\r\n/F1 for YES\t/F2 for NO'.format(kick_initiator, kick_user)
+    vote_end = datetime.datetime.now() + datetime.timedelta(minutes=1)
+    message = 'Vote by: {}\r\n**Kick user:\r\n{}?**\r\n:white_check_mark:: 0\r\n❌: 0\r\n/F1 for YES\t/F2 for NO\r\nVote Ends: {}'.format(
+        kick_initiator, kick_user, vote_end.strftime('%I:%M:%S'))
     discord.reply(interaction, message)
 
 @discord.command(name='votekick', desc='Initiates a votekick for the given user', params={'name': 'user', 'description': 'user to kick', 'type': 6, 'required': True})
