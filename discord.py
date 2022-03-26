@@ -1,5 +1,7 @@
 import datetime
+from email import header
 import websocket
+import threading
 import requests
 import json
 
@@ -7,11 +9,14 @@ class Discord:
 
     API_URL = 'https://discord.com/api'
 
-    def __init__(self, bot_name, token):
+    def __init__(self, bot_name, client_id, token):
+        self.client_id = client_id
         self.bot_name = bot_name
         self.token = token
-        self.heartbeat_interval = -1
-        websocket.enableTrace(True)
+        self.s = None
+        self.ws = None
+        self.commands = {}
+        websocket.enableTrace(True) #Verbose debug
 
     def __request(self, type, url, endpoint, payload, headers):
         url = url + endpoint if endpoint != None else url
@@ -19,13 +24,28 @@ class Discord:
         if type == 'get':
             response = requests.get(url=url, params=payload, headers=headers)
         elif type == 'post':
-            response = requests.post(url=url, params=payload, headers=headers)
+            response = requests.post(url=url,json=payload, headers=headers)
 
         if response.status_code >= 400:
             print('Exited with error: {}, response body: {}'.format(response.status_code, response.json()))
             exit(1)
         else:
-            return response.json()
+            try:
+                return response.json()
+            except requests.exceptions.JSONDecodeError : pass
+
+    def __heartbeat(self, heartbeat_interval):
+        '''Discord websocket connection requires a 'heartbeat' or ping on a certain interval to maintain connection'''
+        timer_start = datetime.datetime.now()
+        while 1:
+            delta = (datetime.datetime.now() - timer_start).seconds * 1000 #millisecond duration since last ping
+
+            if delta >= heartbeat_interval:
+                payload = {'op': 1, 'd': self.s}
+                self.ws.send(data=json.dumps(payload), opcode=1)
+                
+                #reset timer
+                timer_start = datetime.datetime.now()
 
     def __connection_opened(self, ws):
         print('Connection Opened')
@@ -54,23 +74,35 @@ class Discord:
             }
         }
         payload = json.dumps(identity)
-        ws.send(data=payload, opcode=1)
+        self.ws.send(data=payload, opcode=1)
 
     def __connection_closed(self, ws, close_status_code, close_msg):
         print('Connection closed with code: {}. Close message: {}'.format(close_status_code, close_msg))
 
     def __message_recieved(self, ws, message):
-        response = json.loads(message)
-        if response['op'] == 10:
-            self.heartbeat_interval = response['d']['heartbeat_interval']
-            s = response['s']
-            #TODO: START HEARTBEATING
-        elif response['op'] == 11: pass #Acknowledgment code after heartbeat is sent. No action required.
-        elif response['t'] == 'READY': print(self.bot_name + ' is now online.') 
+        def run(*args):
+            response = json.loads(message)
+            if response['op'] == 10: #Case if initial connection to Discord webhook
+                heartbeat_interval = response['d']['heartbeat_interval']
+                s = response['s']
+                self.__heartbeat(heartbeat_interval)
+            elif response['op'] == 11:  self.s = response['s'] #Acknowledgment code after heartbeat is sent. 
+            elif response['t'] == 'READY': #Case if Bot is identified and status set to online 
+                print(self.bot_name + ' is now online.') 
+                Guild.guilds = response['d']['guilds']
+            elif response['t'] == 'GUILD_CREATE': # Case where guild information is recieved. A guild object is created
+                for guild in Guild.guilds:
+                    if(guild['unavailable'] == True):
+                        guild['unavailable'] == False
+                        Guild(response) 
+            elif response['t'] == 'INTERACTION_CREATE': #Case if a slash method is called by a user
+                self.commands[response['d']['data']['name']](response) #Call the func ptr of the named command
+        threading.Thread(target=run).start()
 
 
     def __error_recieved(self, ws, error):
-        print('ERROR ' + str(error))
+        if(len(str(error)) != 0):
+            print('ERROR ' + str(error))
 
     def open_connection(self):
         #Get gateway
@@ -78,35 +110,52 @@ class Discord:
         response = self.__request('get', Discord.API_URL, '/gateway/bot', None, headers)
 
         #Open websocket connection
-        ws = websocket.WebSocketApp(response['url'], 
+        self.ws = websocket.WebSocketApp(response['url'], 
                                     on_open=self.__connection_opened, 
                                     on_close=self.__connection_closed, 
                                     on_message=self.__message_recieved, 
                                     on_error=self.__error_recieved)
-        try:
-            ws.run_forever()
-        except KeyboardInterrupt: print('here')
+        self.ws.run_forever()
+
+    ###################################################
+    ###METHOD DECORATOR FOR DECLARING SLASH COMMANDS###
+    ###################################################
+    def command(self, name, desc, params):
+        def reg(func):
+            if name in self.commands:
+                print('Error: Command name {} already exists. Duplicate command names not allowed'.format(name))
+                exit(1)
+            else:
+                self.commands[name] = func
+                command = {
+                    "name": name,
+                    "type": 1,
+                    "description": desc,
+                }
+                if params != None:
+                    command['options'] = [params]
+                headers = {'Authorization': 'Bot ' + self.token}
+                self.__request('post', Discord.API_URL, '/v8/applications/{}/commands'.format(self.client_id), command, headers)
+            return
+        return reg
+
+    def reply(self, interaction, message, secret_reply=None):
+        '''Replies to the chat where the interaction object was sent'''
+        endpoint = '/interactions/{}/{}/callback'.format(interaction['d']['id'], interaction['d']['token'])
+        headers = {'Authorization': 'Bot ' + self.token}
+        ping_data = {'type': 4, 'data': {'content': message}}
         
-        #Exchange hearbeats with server
-        '''
-        response = json.loads(ws.recv()
-        self.heartbeat_interval = response['d']['heartbeat_interval']
-        s = response['s']
-        timer_start = datetime.datetime.now()
-        while 1:
-            delta = (datetime.datetime.now() - timer_start).seconds * 1000 #millisecond duration since last ping
-            print(str(delta) + ' ' + str(self.heartbeat_interval))
-            if delta >= self.heartbeat_interval:
-                print('here')
-                payload = {'op': 1, 'd': s}
-                ws.send(payload)
-                response = ws.recv()
-                s = response[s]
-                
-                #reset time
-                time_start = datetime.datetime.now()
-            '''
+        #Flag 64 indicates only user who invoked interaction can see
+        if secret_reply == True:
+            ping_data['data']['flags'] = 64
 
+        self.__request('post', Discord.API_URL, endpoint, ping_data, headers)
+        
 
+class Guild:
 
-    
+    guilds = [] #Array of guild ids bot is a part of
+
+    def __init__(self, json):
+        pass
+
