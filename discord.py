@@ -1,9 +1,9 @@
 import datetime
-from email import header
 import websocket
 import threading
 import requests
 import json
+import sys
 
 class http:
     def request(type, url, endpoint, payload, headers):
@@ -13,6 +13,8 @@ class http:
             response = requests.get(url=url, params=payload, headers=headers)
         elif type == 'post':
             response = requests.post(url=url,json=payload, headers=headers)
+        elif type =='patch':
+            response = requests.patch(url=url,json=payload, headers=headers)
 
         if response.status_code >= 400:
             print('Exited with error: {}, response body: {}'.format(response.status_code, response.json()))
@@ -139,15 +141,31 @@ class Discord:
 
     def reply(self, interaction, message, secret_reply=None):
         '''Replies to the chat where the interaction object was sent'''
-        endpoint = '/interactions/{}/{}/callback'.format(interaction['d']['id'], interaction['d']['token'])
-        headers = {'Authorization': 'Bot ' + self.token}
-        ping_data = {'type': 4, 'data': {'content': message}}
-        
-        #Flag 64 indicates only user who invoked interaction can see the response
-        if secret_reply == True:
-            ping_data['data']['flags'] = 64
+        def run():
+            endpoint = '/interactions/{}/{}/callback'.format(interaction['d']['id'], interaction['d']['token'])
+            headers = {'Authorization': 'Bot ' + self.token}
+            msg_data = {'type': 4, 'data': {'content': message}}
+            
+            #Flag 64 indicates only user who invoked interaction can see the response
+            if secret_reply == True:
+                msg_data['data']['flags'] = 64
 
-        http.request('post', Discord.API_URL, endpoint, ping_data, headers)
+            http.request('post', Discord.API_URL, endpoint, msg_data, headers)
+        threading.Thread(target=run).start()
+
+    def edit_interaction(self, interaction, new_message, secret_reply=None):
+        '''Edits an existing interaction response message in the chat'''
+        def run():
+            endpoint = '/v8/webhooks/{}/{}/messages/@original'.format(self.client_id, interaction['d']['token'])
+            headers = {'Authorization': 'Bot ' + self.token}
+            msg_data = {'content': new_message}
+            
+            #Flag 64 indicates only user who invoked interaction can see the response
+            if secret_reply == True:
+                msg_data['data']['flags'] = 64
+
+            http.request('patch', Discord.API_URL, endpoint, msg_data, headers)
+        threading.Thread(target=run).start()
         
 
 class Guild:
@@ -160,6 +178,3 @@ class Guild:
         #response = http.request('get', Discord.API_URL, '/guilds/{}/members'.format(id), None, headers)
         #print(response)
         #exit(0)
-
-
-
