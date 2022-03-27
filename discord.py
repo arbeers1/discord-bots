@@ -35,6 +35,7 @@ class Discord:
         self.s = None
         self.ready_s = None
         self.resume = False
+        self.heartbeat_requested = False
         self.ws = None
         self.commands = {}
         self.guilds = {}
@@ -48,14 +49,14 @@ class Discord:
         while 1:
             delta = (datetime.datetime.now() - timer_start).seconds * 1000 #millisecond duration since last ping
 
-            if delta >= heartbeat_interval:
+            if delta >= heartbeat_interval or  self.heartbeat_requested == True:
                 #If resume is set to true then the websocket is closed. Breaking will terminate this thread and a new 
                 #heartbeat thread will be created when the conneciton is re-opened
                 if self.resume:
                    self.resume = False
                    break
 
-
+                self.heartbeat_requested = False
                 payload = {'op': 1, 'd': self.s}
                 self.ws.send(data=json.dumps(payload), opcode=1)
                 
@@ -122,6 +123,8 @@ class Discord:
                 self.resume = True
                 self.ws.close()
                 self.open_connection()
+            elif response['op'] == 1: #Case if discord requests a heartbeat be sent immediately
+                self.heartbeat_requested = True
 
         threading.Thread(target=run).start() #Respond to events on seperate thread to handle mutliple with extended queue times.
 
