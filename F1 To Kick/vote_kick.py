@@ -1,4 +1,3 @@
-import datetime
 import time
 import os
 import sys
@@ -13,20 +12,26 @@ discord = Discord('F1 To Kick', CLIENT_ID, BOT_TOKEN)
 #Definition for a voting object. These values should not be updated but instead copied to their respective Guild in the guild_votes dict with a Guild Id as the key.
 vote = {
     'vote_in_progress': False,
-    'vote_end': 0,
-    'kick_initiator': None,
-    'kick_user': None,
     'yes': 0,
     'no': 0,
     'users_voted': {}, #Tracks users voted to ensure a user only votes once
-    'interaction': None #The interaction object given by Discord when a user calls /votekick
 }
 
 guild_votes = {} #Seperates vote objects by guild id (server id) in the case that the bot is in multiple servers at once and multiple instances of vote are needed
 
-def end_vote():
-    #TODO: work on this bruv
-    print('VOTE ENDED')
+def end_vote(interaction, guild, kick_user_id, kick_user):
+    if guild_votes[guild]['yes'] > guild_votes[guild]['no']:
+        if guild_votes[guild]['yes'] < 2 : message = '❌ **Vote Failed.**\r\nKick user: {}. Not enough users voted.'.format(kick_user)
+        else:
+            message = ':white_check_mark: **Vote Passed!**\r\nKicking user: {}...'.format(kick_user)
+            discord.disconnect_user(guild, kick_user_id)
+    else : message = '❌ **Vote Failed.**\r\nKick user: ' + kick_user
+
+    discord.edit_interaction(interaction, message)
+    guild_votes[guild]['vote_in_progress'] = False
+    guild_votes[guild]['yes'] = 0
+    guild_votes[guild]['no'] = 0
+    for user in guild_votes[guild]['users_voted'] : guild_votes[guild]['users_voted'][user] = False
 
 def init_vote(interaction):
     '''Set up vote fields and server id for a vote kick to occur and replies to user'''
@@ -34,35 +39,31 @@ def init_vote(interaction):
     kick_nick = interaction['d']['data']['resolved']['members'][kick_user_id]['nick']
     kick_user = kick_nick if kick_nick != None else interaction['d']['data']['resolved']['users'][kick_user_id]['username']
     kick_initiator = interaction['d']['member']['nick'] if  interaction['d']['member']['nick'] != None else interaction['d']['member']['user']['username']
-    #discord.guild(interaction['d']['guild_id'], kick_user_id)
 
     guild = interaction['d']['guild_id']
     guild_votes[guild]['vote_in_progress'] = True
-    guild_votes[guild]['interaction'] = interaction
-    guild_votes[guild]['kick_initiator'] = kick_initiator
-    guild_votes[guild]['kick_user'] = kick_user
+    vote_end = 60
 
-    vote_end = datetime.datetime.now() + datetime.timedelta(minutes=1)
-    guild_votes[interaction['d']['guild_id']]['vote_end'] = vote_end
-    message = 'Vote by: {}\r\n**Kick user:\r\n{}?**\r\n:white_check_mark:: 0\r\n❌: 0\r\n/F1 for YES\t/F2 for NO\r\nVote Ends: {}'.format(
-        kick_initiator, kick_user, vote_end.strftime('%I:%M:%S'))
+    message = 'Vote by: {}\r\n**Kick user:\r\n{}?**\r\n:white_check_mark:: 0\r\n❌: 0\r\n/F1 for YES\t/F2 for NO\r\nVote Ends in {}s'.format(
+        kick_initiator, kick_user, vote_end)
     discord.reply(interaction, message)
 
     #Check for vote end
     while True:
-        if datetime.datetime.now() >= vote_end:
+        if vote_end == 0:
             break
         else:
+            vote_end -= 1
+            update_vote_count_display(interaction, kick_initiator, kick_user, vote_end)
             time.sleep(1)
-    end_vote()
+    end_vote(interaction, guild, kick_user_id, kick_user)
 
 
-def update_vote_count_display(interaction):
+def update_vote_count_display(interaction, kick_initiator, kick_user, vote_end):
     '''Updates the vote count message as votes come in so users can see current tally'''
     guild_id = interaction['d']['guild_id']
-    new_message = 'Vote by: {}\r\n**Kick user:\r\n{}?**\r\n:white_check_mark:: {}\r\n❌: {}\r\n/F1 for YES\t/F2 for NO\r\nVote Ends: {}'.format(
-        guild_votes[guild_id]['kick_initiator'], guild_votes[guild_id]['kick_user'], guild_votes[guild_id]['yes'], guild_votes[guild_id]['no'],  
-        guild_votes[guild_id]['vote_end'].strftime('%I:%M:%S'))
+    new_message = 'Vote by: {}\r\n**Kick user:\r\n{}?**\r\n:white_check_mark:: {}\r\n❌: {}\r\n/F1 for YES\t/F2 for NO\r\nVote Ends: {}s'.format(
+        kick_initiator, kick_user, guild_votes[guild_id]['yes'], guild_votes[guild_id]['no'], vote_end)
     discord.edit_interaction(interaction, new_message)
 
 @discord.command(name='votekick', desc='Initiates a votekick for the given user', params={'name': 'user', 'description': 'user to kick', 'type': 6, 'required': True})
@@ -70,7 +71,7 @@ def kick(interaction):
     guild = interaction['d']['guild_id']
     kick_user = interaction['d']['data']['options'][0]['value']
 
-    if  not discord.user_connected(guild, kick_user):
+    if not discord.user_connected(guild, kick_user):
         message = 'Failed to start votekick. User not in server.'
         discord.reply(interaction, message, secret_reply=True)
     elif not guild in guild_votes:
@@ -99,7 +100,7 @@ def vote_yes(interaction):
     else:
         guild_votes[guild]['users_voted'][caller] = True
         guild_votes[guild]['yes'] += 1
-        update_vote_count_display(guild_votes[guild]['interaction'])
+        
         message = 'You voted: ```yaml\r\nYES\r\n```'
         discord.reply(interaction, message, secret_reply=True)
 
@@ -120,7 +121,7 @@ def vote_no(interaction):
     else:
         guild_votes[guild]['users_voted'][caller] = True
         guild_votes[guild]['no'] += 1
-        update_vote_count_display(guild_votes[guild]['interaction'])
+
         message = 'You voted: ```arm\r\nNO\r\n```'
         discord.reply(interaction, message, secret_reply=True)
 

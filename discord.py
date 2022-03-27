@@ -36,6 +36,7 @@ class Discord:
         self.commands = {}
         self.guilds = {}
         websocket.enableTrace(True) #Verbose debug
+        self.auth_header = {'Authorization': 'Bot ' + self.token}
 
     def __heartbeat(self, heartbeat_interval):
         '''Discord websocket connection requires a 'heartbeat' or ping on a certain interval to maintain connection'''
@@ -107,8 +108,7 @@ class Discord:
 
     def open_connection(self):
         #Get gateway
-        headers = {'Authorization': 'Bot ' + self.token}
-        response = http.request('get', Discord.API_URL, '/gateway/bot', None, headers)
+        response = http.request('get', Discord.API_URL, '/gateway/bot', None, self.auth_header)
 
         #Open websocket connection
         self.ws = websocket.WebSocketApp(response['url'], 
@@ -135,8 +135,7 @@ class Discord:
                 }
                 if params != None:
                     command['options'] = [params]
-                headers = {'Authorization': 'Bot ' + self.token}
-                http.request('post', Discord.API_URL, '/v8/applications/{}/commands'.format(self.client_id), command, headers)
+                http.request('post', Discord.API_URL, '/v8/applications/{}/commands'.format(self.client_id), command, self.auth_header)
             return
         return reg
 
@@ -144,28 +143,26 @@ class Discord:
         '''Replies to the chat where the interaction object was sent'''
         def run():
             endpoint = '/interactions/{}/{}/callback'.format(interaction['d']['id'], interaction['d']['token'])
-            headers = {'Authorization': 'Bot ' + self.token}
             msg_data = {'type': 4, 'data': {'content': message}}
             
             #Flag 64 indicates only user who invoked interaction can see the response
             if secret_reply == True:
                 msg_data['data']['flags'] = 64
 
-            http.request('post', Discord.API_URL, endpoint, msg_data, headers)
+            http.request('post', Discord.API_URL, endpoint, msg_data, self.auth_header)
         threading.Thread(target=run).start()
 
     def edit_interaction(self, interaction, new_message, secret_reply=None):
         '''Edits an existing interaction response message in the chat'''
         def run():
             endpoint = '/v8/webhooks/{}/{}/messages/@original'.format(self.client_id, interaction['d']['token'])
-            headers = {'Authorization': 'Bot ' + self.token}
             msg_data = {'content': new_message}
             
             #Flag 64 indicates only user who invoked interaction can see the response
             if secret_reply == True:
                 msg_data['data']['flags'] = 64
 
-            http.request('patch', Discord.API_URL, endpoint, msg_data, headers)
+            http.request('patch', Discord.API_URL, endpoint, msg_data, self.auth_header)
         threading.Thread(target=run).start()
 
     def user_connected(self, guild_id, user_id):
@@ -174,6 +171,13 @@ class Discord:
             return False
         else:
             return users[user_id]
+
+    def disconnect_user(self, guild_id, user_id):
+        def run():
+            endpoint = '/guilds/{}/members/{}'.format(guild_id, user_id)
+            payload = {'channel_id': None}
+            http.request('patch', Discord.API_URL, endpoint, payload, self.auth_header)
+        threading.Thread(target=run).start()
         
 class Guild:
 
