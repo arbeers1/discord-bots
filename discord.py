@@ -1,8 +1,9 @@
 import datetime
-import opcode
 import websocket
 import threading
 import requests
+import logging
+from logging.handlers import RotatingFileHandler
 import json
 
 class http:
@@ -18,6 +19,7 @@ class http:
 
         if response.status_code >= 400:
             print('Exited with error: {}, response body: {}'.format(response.status_code, response.json()))
+            Discord.log.error(str(response.status_code) + ': ' + str(response.json()))
             exit(1)
         else:
             try:
@@ -27,8 +29,18 @@ class http:
 class Discord:
 
     API_URL = 'https://discord.com/api'
+    log = None
 
     def __init__(self, bot_name, client_id, token):
+        log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s')
+        my_handler = RotatingFileHandler(Discord.log_file, mode='a', maxBytes=1*1024*1024*1024, 
+                                        backupCount=2, encoding='utf-8', delay=0)
+        my_handler.setFormatter(log_formatter)
+        my_handler.setLevel(logging.INFO)
+        Discord.log = logging.getLogger('root')
+        Discord.log.setLevel(logging.INFO)
+        Discord.log.addHandler(my_handler)
+
         self.client_id = client_id
         self.bot_name = bot_name
         self.token = token
@@ -40,7 +52,7 @@ class Discord:
         self.commands = {}
         self.guilds = {}
         self.auth_header = {'Authorization': 'Bot ' + self.token}
-        websocket.enableTrace(True) #Verbose debug
+        #websocket.enableTrace(True) #Verbose debug
 
     def __heartbeat(self, heartbeat_interval):
         '''Discord websocket connection requires a 'heartbeat' or ping on a certain interval to maintain connection'''
@@ -91,15 +103,19 @@ class Discord:
         }
         payload = json.dumps(identity)
         self.ws.send(data=payload, opcode=1)
+        Discord.log.info('Identity Sent')
 
     def __connection_closed(self, ws, close_status_code, close_msg):
         print('Connection closed with code: {}. Close message: {}'.format(close_status_code, close_msg))
+        Discord.log.warning('Connection closed')
 
     def __error_recieved(self, ws, error):
         if(len(str(error)) != 0):
             print('ERROR ' + str(error))
+        Discord.log.error(error)
 
     def __message_recieved(self, ws, message):
+        Discord.log.info(message)
         def run(*args):
             response = json.loads(message)
             self.s = response['s']
@@ -138,6 +154,7 @@ class Discord:
                                     on_close=self.__connection_closed, 
                                     on_message=self.__message_recieved, 
                                     on_error=self.__error_recieved)
+        Discord.log.info('Connection Opened')
         self.ws.run_forever()
 
     def __resume(self):
