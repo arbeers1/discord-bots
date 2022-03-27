@@ -1,4 +1,5 @@
 import datetime
+import opcode
 import websocket
 import threading
 import requests
@@ -32,19 +33,29 @@ class Discord:
         self.bot_name = bot_name
         self.token = token
         self.s = None
+        self.ready_s = None
+        self.resume = False
         self.ws = None
         self.commands = {}
         self.guilds = {}
-        websocket.enableTrace(True) #Verbose debug
         self.auth_header = {'Authorization': 'Bot ' + self.token}
+        websocket.enableTrace(True) #Verbose debug
 
     def __heartbeat(self, heartbeat_interval):
         '''Discord websocket connection requires a 'heartbeat' or ping on a certain interval to maintain connection'''
         timer_start = datetime.datetime.now()
+
         while 1:
             delta = (datetime.datetime.now() - timer_start).seconds * 1000 #millisecond duration since last ping
 
             if delta >= heartbeat_interval:
+                #If resume is set to true then the websocket is closed. Breaking will terminate this thread and a new 
+                #heartbeat thread will be created when the conneciton is re-opened
+                if self.resume:
+                   self.resume = False
+                   break
+
+
                 payload = {'op': 1, 'd': self.s}
                 self.ws.send(data=json.dumps(payload), opcode=1)
                 
@@ -90,13 +101,16 @@ class Discord:
     def __message_recieved(self, ws, message):
         def run(*args):
             response = json.loads(message)
+            self.s = response['s']
             if response['op'] == 10: #Case if initial connection to Discord webhook
+                if self.resume: #Resume operations if connection is opened following a disconnect
+                    self.__resume()
                 heartbeat_interval = response['d']['heartbeat_interval']
-                s = response['s']
                 self.__heartbeat(heartbeat_interval)
-            elif response['op'] == 11:  self.s = response['s'] #Acknowledgment code after heartbeat is sent. 
+            elif response['op'] == 11:  pass #Acknowledgment code after heartbeat is sent. 
             elif response['t'] == 'READY': #Case if Bot is identified and status set to online 
                 print(self.bot_name + ' is now online.') 
+                self.ready_s = response['d']['session_id']
             elif response['t'] == 'GUILD_CREATE': # Case where guild information is recieved. A guild object is created
                 if response['d']['id'] not in self.guilds:
                     self.guilds[response['d']['id']] = Guild(response['d']['id'], self.token, response)
@@ -104,6 +118,11 @@ class Discord:
                 self.commands[response['d']['data']['name']](response) #Call the func ptr of the named command
             elif response['t'] == 'VOICE_STATE_UPDATE': #Case if a user joins/leaves voice channel
                 self.guilds[response['d']['guild_id']].update_user(response)
+            elif response['op'] == 8: #Case if discord requests that the websocket be closed and a new one opened
+                self.resume = True
+                self.ws.close()
+                self.open_connection()
+
         threading.Thread(target=run).start() #Respond to events on seperate thread to handle mutliple with extended queue times.
 
     def open_connection(self):
@@ -117,6 +136,12 @@ class Discord:
                                     on_message=self.__message_recieved, 
                                     on_error=self.__error_recieved)
         self.ws.run_forever()
+
+    def __resume(self):
+        def run():
+            payload = {'op': 6, 'd': {'token': self.token, 'session_id': self.ready_s, 'seq': self.s}}
+            self.ws.send(data=json.dumps(payload), opcode=1)
+        threading.Thread(target=run).start()
 
     ###################################################
     ###METHOD DECORATOR FOR DECLARING SLASH COMMANDS###
@@ -171,6 +196,9 @@ class Discord:
             return False
         else:
             return users[user_id]
+
+    def num_users_connected(self, guild_id):
+        return len(self.guilds[guild_id].users_connected)
 
     def disconnect_user(self, guild_id, user_id):
         def run():

@@ -14,6 +14,7 @@ vote = {
     'vote_in_progress': False,
     'yes': 0,
     'no': 0,
+    'vote_order': [],
     'users_voted': {}, #Tracks users voted to ensure a user only votes once
 }
 
@@ -31,6 +32,7 @@ def end_vote(interaction, guild, kick_user_id, kick_user):
     guild_votes[guild]['vote_in_progress'] = False
     guild_votes[guild]['yes'] = 0
     guild_votes[guild]['no'] = 0
+    guild_votes[guild]['vote_order'] = []
     for user in guild_votes[guild]['users_voted'] : guild_votes[guild]['users_voted'][user] = False
 
 def init_vote(interaction):
@@ -42,28 +44,42 @@ def init_vote(interaction):
 
     guild = interaction['d']['guild_id']
     guild_votes[guild]['vote_in_progress'] = True
+    max_votes = discord.num_users_connected(guild)
     vote_end = 60
 
-    message = 'Vote by: {}\r\n**Kick user:\r\n{}?**\r\n:white_check_mark:: 0\r\n❌: 0\r\n/F1 for YES\t/F2 for NO\r\nVote Ends in {}s'.format(
-        kick_initiator, kick_user, vote_end)
+    vote_bar = ''
+    for x in range(max_votes) : vote_bar += ':black_square_button:'
+    message = 'Vote by: {}\r\n**Kick user:\r\n{}?**\r\n{}\r\n/F1 for YES\t/F2 for NO\r\nVote Ends in {}s'.format(
+        kick_initiator, kick_user, vote_bar, vote_end)
     discord.reply(interaction, message)
 
     #Check for vote end
     while True:
         if vote_end == 0:
             break
+        elif guild_votes[guild]['yes'] + guild_votes[guild]['no'] == max_votes: #Case if all votes are in
+            break
         else:
             vote_end -= 1
-            update_vote_count_display(interaction, kick_initiator, kick_user, vote_end)
+            update_vote_count_display(interaction, kick_initiator, kick_user, vote_end, max_votes)
             time.sleep(1)
     end_vote(interaction, guild, kick_user_id, kick_user)
 
 
-def update_vote_count_display(interaction, kick_initiator, kick_user, vote_end):
+def update_vote_count_display(interaction, kick_initiator, kick_user, vote_end, max_votes):
     '''Updates the vote count message as votes come in so users can see current tally'''
     guild_id = interaction['d']['guild_id']
-    new_message = 'Vote by: {}\r\n**Kick user:\r\n{}?**\r\n:white_check_mark:: {}\r\n❌: {}\r\n/F1 for YES\t/F2 for NO\r\nVote Ends: {}s'.format(
-        kick_initiator, kick_user, guild_votes[guild_id]['yes'], guild_votes[guild_id]['no'], vote_end)
+    vote_bar = ''
+    for x in range(max_votes):
+        if x >= len(guild_votes[guild_id]['vote_order']):
+            vote_bar += ':black_square_button:'
+        elif guild_votes[guild_id]['vote_order'][x] == True:
+            vote_bar += ':white_check_mark:'
+        else:
+            vote_bar += ':x:'
+
+    new_message = 'Vote by: {}\r\n**Kick user:\r\n{}?**\r\n{}\r\n/F1 for YES\t/F2 for NO\r\nVote Ends: {}s'.format(
+        kick_initiator, kick_user, vote_bar, vote_end)
     discord.edit_interaction(interaction, new_message)
 
 @discord.command(name='votekick', desc='Initiates a votekick for the given user', params={'name': 'user', 'description': 'user to kick', 'type': 6, 'required': True})
@@ -100,6 +116,7 @@ def vote_yes(interaction):
     else:
         guild_votes[guild]['users_voted'][caller] = True
         guild_votes[guild]['yes'] += 1
+        guild_votes[guild]['vote_order'].append(True)
         
         message = 'You voted: ```yaml\r\nYES\r\n```'
         discord.reply(interaction, message, secret_reply=True)
@@ -121,6 +138,7 @@ def vote_no(interaction):
     else:
         guild_votes[guild]['users_voted'][caller] = True
         guild_votes[guild]['no'] += 1
+        guild_votes[guild]['vote_order'].append(False)
 
         message = 'You voted: ```arm\r\nNO\r\n```'
         discord.reply(interaction, message, secret_reply=True)
