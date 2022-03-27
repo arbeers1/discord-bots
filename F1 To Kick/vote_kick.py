@@ -7,6 +7,7 @@ from discord import Discord
 CLIENT_ID = '956693017329283072'
 BOT_TOKEN = os.environ['F1_BOT_TOKEN']
 
+Discord.log = os.path.dirname(os.path.realpath(__file__)) + '\log.txt'
 discord = Discord('F1 To Kick', CLIENT_ID, BOT_TOKEN)
 
 #Definition for a voting object. These values should not be updated but instead copied to their respective Guild in the guild_votes dict with a Guild Id as the key.
