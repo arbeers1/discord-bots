@@ -5,6 +5,7 @@ import requests
 import logging
 from logging.handlers import RotatingFileHandler
 import json
+import time
 
 class http:
     def request(type, url, endpoint, payload, headers):
@@ -26,7 +27,7 @@ class http:
                 return response.json()
             except requests.exceptions.JSONDecodeError : pass
 
-class Discord:
+class Discord: #TODO: make log a class var. test new seq
 
     API_URL = 'https://discord.com/api'
     log = None
@@ -45,10 +46,12 @@ class Discord:
         self.bot_name = bot_name
         self.token = token
         self.s = None
-        self.ready_s = None
+        self.session = None
         self.resume = False
+        self.error = None
         self.heartbeat_requested = False
         self.ws = None
+        self.thread = None #Tracks current message handler thread to join it with the main thread on reconnect.
         self.commands = {}
         self.guilds = {}
         self.auth_header = {'Authorization': 'Bot ' + self.token}
@@ -78,6 +81,9 @@ class Discord:
     def __connection_opened(self, ws):
         print('Connection Opened')
 
+        #if self.resume: #Resume operations if connection is opened following a disconnect
+        #    self.__resume()
+        
         #Ready bot
         identity = {
             'op': 2,
@@ -107,12 +113,20 @@ class Discord:
 
     def __connection_closed(self, ws, close_status_code, close_msg):
         print('Connection closed with code: {}. Close message: {}'.format(close_status_code, close_msg))
-        Discord.log.warning('Connection closed')
+        Discord.log.warning('Connection closed with code: {}. Close message: {}'.format(close_status_code, close_msg))
+
+        if self.error == 'Connection to remote host was lost.':
+            self.error = None
+            Discord.log.info('Attempting reconnect')
+            print('Connection lost. Attempting reconnect.')
+            self.resume = True
+            self.open_connection()
 
     def __error_recieved(self, ws, error):
         if(len(str(error)) != 0):
             print('ERROR ' + str(error))
         Discord.log.error(error)
+        self.error = error
 
     def __message_recieved(self, ws, message):
         Discord.log.info(message)
@@ -120,14 +134,12 @@ class Discord:
             response = json.loads(message)
             self.s = response['s']
             if response['op'] == 10: #Case if initial connection to Discord webhook
-                if self.resume: #Resume operations if connection is opened following a disconnect
-                    self.__resume()
                 heartbeat_interval = response['d']['heartbeat_interval']
                 self.__heartbeat(heartbeat_interval)
             elif response['op'] == 11:  pass #Acknowledgment code after heartbeat is sent. 
             elif response['t'] == 'READY': #Case if Bot is identified and status set to online 
                 print(self.bot_name + ' is now online.') 
-                self.ready_s = response['d']['session_id']
+                self.session = response['d']['session_id']
             elif response['t'] == 'GUILD_CREATE': # Case where guild information is recieved. A guild object is created
                 if response['d']['id'] not in self.guilds:
                     self.guilds[response['d']['id']] = Guild(response['d']['id'], self.token, response)
@@ -135,14 +147,19 @@ class Discord:
                 self.commands[response['d']['data']['name']](response) #Call the func ptr of the named command
             elif response['t'] == 'VOICE_STATE_UPDATE': #Case if a user joins/leaves voice channel
                 self.guilds[response['d']['guild_id']].update_user(response)
-            elif response['op'] == 8: #Case if discord requests that the websocket be closed and a new one opened
+            elif response['op'] == 7: #Case if discord requests that the websocket be closed and a new one opened
+                Discord.log.info('Attempting reconnect')
+                print('Reconnect requested.')
+                #self.thread.daemon = True
+                #self.thread.join()
                 self.resume = True
                 self.ws.close()
                 self.open_connection()
             elif response['op'] == 1: #Case if discord requests a heartbeat be sent immediately
                 self.heartbeat_requested = True
 
-        threading.Thread(target=run).start() #Respond to events on seperate thread to handle mutliple with extended queue times.
+        self.thread = threading.Thread(target=run)
+        self.thread.start() #Respond to events on seperate thread to handle mutliple with extended queue times.
 
     def open_connection(self):
         #Get gateway
@@ -159,7 +176,8 @@ class Discord:
 
     def __resume(self):
         def run():
-            payload = {'op': 6, 'd': {'token': self.token, 'session_id': self.ready_s, 'seq': self.s}}
+            logging.info('Resume request sent')
+            payload = {'op': 6, 'd': {'token': self.token, 'session_id': self.session, 'seq': self.s}}
             self.ws.send(data=json.dumps(payload), opcode=1)
         threading.Thread(target=run).start()
 
