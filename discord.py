@@ -1,3 +1,4 @@
+from concurrent.futures import thread
 import datetime
 import websocket
 import threading
@@ -51,6 +52,7 @@ class Discord: #TODO: make log a class var. test new seq
         self.heartbeat_requested = False
         self.ws = None
         self.thread = None #Tracks current message handler thread to join it with the main thread on reconnect.
+        self.keyboard_interrupt = False
         self.commands = {}
         self.guilds = {}
         self.auth_header = {'Authorization': 'Bot ' + self.token}
@@ -63,12 +65,14 @@ class Discord: #TODO: make log a class var. test new seq
         while 1:
             delta = (datetime.datetime.now() - timer_start).seconds * 1000 #millisecond duration since last ping
 
+            if self.keyboard_interrupt : break
+
             if delta >= heartbeat_interval or  self.heartbeat_requested == True:
                 #If resume is set to true then the websocket is closed. Breaking will terminate this thread and a new 
                 #heartbeat thread will be created when the conneciton is re-opened
                 if self.resume:
-                   self.resume = False
-                   break
+                    self.resume = False
+                    break
 
                 self.heartbeat_requested = False
                 payload = {'op': 1, 'd': self.s}
@@ -124,6 +128,12 @@ class Discord: #TODO: make log a class var. test new seq
     def __error_recieved(self, ws, error):
         if(len(str(error)) != 0):
             print('ERROR ' + str(error))
+        else:
+            print('Keyboard Interrupt')
+            Discord.log.info('Keyboard Interrupt')
+            self.thread.join()
+            self.keyboard_interrupt = True
+
         Discord.log.error(error)
         self.error = error
 
@@ -241,7 +251,6 @@ class Discord: #TODO: make log a class var. test new seq
         def run():
             endpoint = '/guilds/{}/members/{}'.format(guild_id, user_id)
             payload = {'channel_id': channel}
-            print('Moving user {} to {}'.format(user_id, channel))
             http.request('patch', Discord.API_URL, endpoint, payload, self.auth_header)
         threading.Thread(target=run).start()
         
@@ -262,6 +271,6 @@ class Guild:
         channel = response['d']['channel_id']
 
         if channel == None:
-            self.users_connected[user_id] = False
+            self.users_connected.pop(user_id)
         else:
             self.users_connected[user_id] = channel
