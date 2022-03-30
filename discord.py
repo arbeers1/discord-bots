@@ -5,7 +5,6 @@ import requests
 import logging
 from logging.handlers import RotatingFileHandler
 import json
-import time
 
 class http:
     def request(type, url, endpoint, payload, headers):
@@ -263,6 +262,6 @@ class Guild:
         channel = response['d']['channel_id']
 
         if channel == None:
-            self.users_connected[user_id] = False
+            self.users_connected.pop(user_id)
         else:
             self.users_connected[user_id] = channel
