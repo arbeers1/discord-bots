@@ -150,8 +150,11 @@ def move(interaction):
     user_initiator = interaction['d']['member']['user']['id'] 
     guild = interaction['d']['guild_id']
     channel_id = discord.user_connected(guild, user_initiator)
+    target_user_channel = discord.user_connected(guild, user)
 
-    if channel_id != False and channel_id != None:
+    if target_user_channel == False:
+        discord.reply(interaction, 'User is not connected', secret_reply=True)
+    elif channel_id != False and channel_id != None:
         discord.reply(interaction, 'Moving user', secret_reply=True)
         discord.move_user(guild, user, channel_id)
     else:

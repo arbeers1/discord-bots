@@ -241,7 +241,6 @@ class Discord: #TODO: make log a class var. test new seq
         def run():
             endpoint = '/guilds/{}/members/{}'.format(guild_id, user_id)
             payload = {'channel_id': channel}
-            print('Moving user {} to {}'.format(user_id, channel))
             http.request('patch', Discord.API_URL, endpoint, payload, self.auth_header)
         threading.Thread(target=run).start()
         
