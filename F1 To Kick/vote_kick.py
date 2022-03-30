@@ -1,4 +1,3 @@
-from code import interact
 import time
 import os
 import sys
