@@ -206,7 +206,7 @@ class Discord: #TODO: make log a class var. test new seq
                     "description": desc,
                 }
                 if params != None:
-                    command['options'] = [params]
+                    command['options'] = params
                 http.request('post', Discord.API_URL, '/v8/applications/{}/commands'.format(self.client_id), command, self.auth_header)
             return
         return reg
