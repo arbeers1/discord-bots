@@ -7,24 +7,24 @@ from logging.handlers import RotatingFileHandler
 import json
 
 class http:
-    def request(type, url, endpoint, payload, headers):
-        url = url + endpoint if endpoint != None else url
+  def request(type, url, endpoint, payload, headers):
+      url = url + endpoint if endpoint != None else url
 
-        if type == 'get':
-            response = requests.get(url=url, params=payload, headers=headers)
-        elif type == 'post':
-            response = requests.post(url=url,json=payload, headers=headers)
-        elif type =='patch':
-            response = requests.patch(url=url,json=payload, headers=headers)
+      if type == 'get':
+          response = requests.get(url=url, params=payload, headers=headers)
+      elif type == 'post':
+          response = requests.post(url=url,json=payload, headers=headers)
+      elif type =='patch':
+          response = requests.patch(url=url,json=payload, headers=headers)
 
-        if response.status_code >= 400:
-            print('Exited with error: {}, response body: {}'.format(response.status_code, response.json()))
-            Discord.log.error(str(response.status_code) + ': ' + str(response.json()))
-            exit(1)
-        else:
-            try:
-                return response.json()
-            except requests.exceptions.JSONDecodeError : pass
+      if response.status_code >= 400:
+          print('Exited with error: {}, response body: {}'.format(response.status_code, response.json()))
+          Discord.log.error(str(response.status_code) + ': ' + str(response.json()))
+          exit(1)
+      else:
+          try:
+              return response.json()
+          except requests.exceptions.JSONDecodeError : pass
 
 class Discord: #TODO: make log a class var. test new seq
 
