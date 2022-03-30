@@ -238,10 +238,11 @@ class Discord: #TODO: make log a class var. test new seq
     def num_users_connected(self, guild_id):
         return len(self.guilds[guild_id].users_connected)
 
-    def disconnect_user(self, guild_id, user_id):
+    def move_user(self, guild_id, user_id, channel):
         def run():
             endpoint = '/guilds/{}/members/{}'.format(guild_id, user_id)
-            payload = {'channel_id': None}
+            payload = {'channel_id': channel}
+            print('Moving user {} to {}'.format(user_id, channel))
             http.request('patch', Discord.API_URL, endpoint, payload, self.auth_header)
         threading.Thread(target=run).start()
         
@@ -253,7 +254,8 @@ class Guild:
 
         self.users_connected = {}
         for user in guild_create['d']['voice_states']:
-            self.users_connected[user['user_id']] = True
+            channel = user['channel_id']
+            self.users_connected[user['user_id']] = channel
 
     def update_user(self, response):
         '''Sets a users status to True/False (online/offline)'''
@@ -263,4 +265,4 @@ class Guild:
         if channel == None:
             self.users_connected[user_id] = False
         else:
-            self.users_connected[user_id] = True
+            self.users_connected[user_id] = channel

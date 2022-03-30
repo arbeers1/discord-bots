@@ -1,3 +1,4 @@
+from code import interact
 import time
 import os
 import sys
@@ -26,7 +27,7 @@ def end_vote(interaction, guild, kick_user_id, kick_user):
         if guild_votes[guild]['yes'] < 2 : message = '❌ **Vote Failed.**\r\nKick user: {}. Not enough users voted.'.format(kick_user)
         else:
             message = ':white_check_mark: **Vote Passed!**\r\nKicking user: {}...'.format(kick_user)
-            discord.disconnect_user(guild, kick_user_id)
+            discord.move_user(guild, kick_user_id, None)
     else : message = '❌ **Vote Failed.**\r\nKick user: ' + kick_user
 
     discord.edit_interaction(interaction, message)
@@ -143,5 +144,19 @@ def vote_no(interaction):
 
         message = 'You voted: ```arm\r\nNO\r\n```'
         discord.reply(interaction, message, secret_reply=True)
+
+@discord.command(name='move', desc='Moves a user to your channel', params={'name': 'user', 'description': 'user to move', 'type': 6, 'required': True})
+def move(interaction):
+    user = interaction['d']['data']['options'][0]['value']
+    user_initiator = interaction['d']['member']['user']['id'] 
+    guild = interaction['d']['guild_id']
+    channel_id = discord.user_connected(guild, user_initiator)
+
+    if channel_id != False and channel_id != None:
+        discord.reply(interaction, 'Moving user', secret_reply=True)
+        discord.move_user(guild, user, channel_id)
+    else:
+        discord.reply(interaction, 'You must join a channel before moving a user', secret_reply=True)
+
 
 discord.open_connection() #Starts the bot
