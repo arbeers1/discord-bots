@@ -120,7 +120,7 @@ class Discord: #TODO: make log a class var. test new seq
         print('Connection closed with code: {}. Close message: {}'.format(close_status_code, close_msg))
         Discord.log.warning('Connection closed with code: {}. Close message: {}'.format(close_status_code, close_msg))
 
-        if self.error == 'Connection to remote host was lost.':
+        if 'Connection to remote host was lost.' in str(self.error):
             self.error = None
             Discord.log.info('Attempting reconnect')
             print('Connection lost. Attempting reconnect.')
