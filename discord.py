@@ -23,7 +23,7 @@ class http:
       if response.status_code >= 400:
           print('Exited with error: {}, response body: {}'.format(response.status_code, response.json()))
           Discord.log.error(str(response.status_code) + ': ' + str(response.json()))
-          exit(1)
+          return response.status_code
       else:
           try:
               return response.json()
