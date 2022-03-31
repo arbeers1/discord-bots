@@ -17,6 +17,8 @@ class http:
           response = requests.post(url=url,json=payload, headers=headers)
       elif type =='patch':
           response = requests.patch(url=url,json=payload, headers=headers)
+      elif type == 'delete':
+          response = requests.delete(url=url, headers=headers)
 
       if response.status_code >= 400:
           print('Exited with error: {}, response body: {}'.format(response.status_code, response.json()))
@@ -118,7 +120,7 @@ class Discord: #TODO: make log a class var. test new seq
         print('Connection closed with code: {}. Close message: {}'.format(close_status_code, close_msg))
         Discord.log.warning('Connection closed with code: {}. Close message: {}'.format(close_status_code, close_msg))
 
-        if self.error == 'Connection to remote host was lost.':
+        if 'Connection to remote host was lost.' in str(self.error):
             self.error = None
             Discord.log.info('Attempting reconnect')
             print('Connection lost. Attempting reconnect.')
@@ -206,10 +208,22 @@ class Discord: #TODO: make log a class var. test new seq
                     "description": desc,
                 }
                 if params != None:
-                    command['options'] = [params]
+                    command['options'] = params
                 http.request('post', Discord.API_URL, '/v8/applications/{}/commands'.format(self.client_id), command, self.auth_header)
             return
         return reg
+
+    def delete_command(self, command_name):
+        endpoint = '/applications/{}/commands'.format(self.client_id)
+        commands = http.request('get', Discord.API_URL, endpoint, None, self.auth_header)
+        
+        for command in commands:
+            if command['name'] == command_name:
+                delete_endpoint = endpoint + '/' + command['id']
+                http.request('delete', Discord.API_URL, delete_endpoint, None, self.auth_header)
+                print('Command deleted')
+                return
+        print('Command {} not found'.format(command_name))
 
     def reply(self, interaction, message, secret_reply=None):
         '''Replies to the chat where the interaction object was sent'''

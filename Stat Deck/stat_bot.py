@@ -1,9 +1,24 @@
 import sys
+import os
+import cfscrape
 from bs4 import BeautifulSoup
+import command_definitions as comms
 sys.path.append(sys.path[0].replace('Stat Deck', ''))
 from discord import Discord
-import cfscrape
 
+
+
+CLIENT_ID = ''
+BOT_TOKEN = os.environ['']
+
+Discord.log_file = os.path.dirname(os.path.realpath(__file__)) + '\log.txt'
+discord = Discord('Match Viewer', CLIENT_ID, BOT_TOKEN)
+
+@discord.command('register', 'register a summoner or steam id', params=comms.register_params)
+def register():
+
+
+'''
 def cs_match_history():
     ''''''
     steam_id = 76561198094731327
@@ -31,8 +46,6 @@ def cs_match_history():
 
 cs_match_history()
 
-'''
-League shit
 payload = {
     'api_key': 'RGAPI-7bfe2788-99a2-475b-9859-34aba067294d'
 }

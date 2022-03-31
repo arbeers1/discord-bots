@@ -83,7 +83,7 @@ def update_vote_count_display(interaction, kick_initiator, kick_user, vote_end, 
         kick_initiator, kick_user, vote_bar, vote_end)
     discord.edit_interaction(interaction, new_message)
 
-@discord.command(name='votekick', desc='Initiates a votekick for the given user', params={'name': 'user', 'description': 'user to kick', 'type': 6, 'required': True})
+@discord.command(name='votekick', desc='Initiates a votekick for the given user', params=[{'name': 'user', 'description': 'user to kick', 'type': 6, 'required': True}])
 def kick(interaction):
     guild = interaction['d']['guild_id']
     kick_user = interaction['d']['data']['options'][0]['value']
@@ -144,7 +144,7 @@ def vote_no(interaction):
         message = 'You voted: ```arm\r\nNO\r\n```'
         discord.reply(interaction, message, secret_reply=True)
 
-@discord.command(name='move', desc='Moves a user to your channel', params={'name': 'user', 'description': 'user to move', 'type': 6, 'required': True})
+@discord.command(name='move', desc='Moves a user to your channel', params=[{'name': 'user', 'description': 'user to move', 'type': 6, 'required': True}])
 def move(interaction):
     user = interaction['d']['data']['options'][0]['value']
     user_initiator = interaction['d']['member']['user']['id'] 
