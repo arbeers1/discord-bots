@@ -1,23 +1,107 @@
+from msilib.schema import Error
 import sys
 import os
 import cfscrape
+import sqlite3
+from sql import SqlPool
 from bs4 import BeautifulSoup
-import command_definitions as comms
+from bad_request import check
+from data.defenitions import *
 sys.path.append(sys.path[0].replace('Stat Deck', ''))
-from discord import Discord
+from discord import Discord, http
+
+CLIENT_ID = '958807036483739738'
+BOT_TOKEN = os.environ['STAT_DECK_TOKEN']
+
+sql_pool = SqlPool(10)
+db = sql_pool.get_db()
+db[1].execute(SQL.CREATE_TABLE)
+sql_pool.commit(db)
+
+Discord.log_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data/log.txt')
+discord = Discord('Stat Deck', CLIENT_ID, BOT_TOKEN)
+warning = 'Warning: Command under development.\r\n'
+
+@discord.command('register', 'register a summoner or steam id', params=Commands.REGISTER_PARAMS)
+def register(interaction):
+    discord.reply(interaction, 'Processing ID Register')
+    game = interaction['d']['data']['options'][0]['value']
+    user_id = interaction['d']['data']['options'][1]['value']
+    user = user_display_name(interaction, user_id)
+    game_id = interaction['d']['data']['options'][2]['value']
+
+    db = sql_pool.get_db()
+    db[1].execute(SQL.USER_EXISTS, (user_id,))
+    data = db[1].fetchone()
+    if data != None:
+        if game == 'cs':
+            db[1].execute(SQL.UPDATE_CS_ID, (game_id, user_id))
+        elif game == 'lol':
+            db[1].execute(SQL.UPDATE_LOL_ID, (game_id, user_id))
+    else:
+        if game == 'cs':
+            db[1].execute(SQL.CREATE_USER, (user_id, game_id, None))
+        elif game == 'lol':
+            db[1].execute(SQL.CREATE_USER, (user_id, None, game_id))
+    sql_pool.commit(db)
+    discord.edit_interaction(interaction, warning + 'Registered id {} to {} for user: {}'.format(game_id, game, user))
+
+@discord.command('cs', 'get user\'s cs match history', params=Commands.MATCH_PARAMS)
+def cs(interaction):
+    discord.reply(interaction, 'Command not yet implemented')
+
+@discord.command('lol', 'get user\'s league of legends match history', params=Commands.MATCH_PARAMS)
+def lol(interaction):
+    user_id = interaction['d']['data']['options'][0]['value']
+    user = user_display_name(interaction, user_id)
+    if len(interaction['d']['data']['options']) > 1:
+        depth = interaction['d']['data']['options'][1]['value']
+    else:
+        depth = 1
+    if depth > 10:
+        discord.reply(interaction, 'Error: Max supported depth is 10', secret_reply=True)
+        return
+
+    discord.reply(interaction, warning + 'Getting league match history for \'{}\' with depth: {}'.format(user, str(depth)))
+
+    db = sql_pool.get_db()
+    db[1].execute(SQL.SUMMONER_ID, (user_id,))
+    summoner_id = db[1].fetchone()
+    sql_pool.commit(db)
+    if summoner_id == None or summoner_id[0] == None:
+        discord.edit_interaction(interaction, 'User \'{}\' not registered. Use /register to register your summoner id.'.format(user))
+        return
+    summoner_id = summoner_id[0]
+
+    response = http.request('get', Api.NA_URL, Api.SUMMONER_ENDPOINT + summoner_id, {'api_key': Api.KEY}, None) #Get user puuid
+    if check(response, interaction, summoner_id, discord) : return
+    matches = http.request('get', Api.AMERICA_URL, Api.USER_MATCHES_ENDPOINT.replace('{puuid}', response['puuid']), {'api_key': Api.KEY}, None) #Get match ids
+    if check(matches, interaction, summoner_id, discord) : return
+
+    user_match_info = warning + 'Summoner {}\'s match history. depth={}\r\nWin / Game Mode / Champ / Lane / KDA / Total Champion Damage\r\n'.format(summoner_id, depth)
+    for i in range(depth):
+        if i >= len(matches) :break
+
+        response = http.request('get', Api.AMERICA_URL, Api.MATCH_STATS_ENDPOINT + matches[i], {'api_key': Api.KEY}, None)
+        if check(response, interaction, summoner_id, discord) : return
+        for stat in response['info']['participants']:
+            if stat['summonerName'] == summoner_id:
+                user_match_info = user_match_info + 'Win | ' if stat['win'] else user_match_info + 'Loss | '
+                user_match_info += queue_types[response['info']['queueId']] + ' | '
+                user_match_info += '{} | '.format(stat['championName'])
+                if stat['lane'] == 'JUNGLE' : lane = 'JUNG'
+                elif stat['lane'] == 'NONE' : lane = 'N/A'
+                else : lane = stat['lane'][0:3]
+                user_match_info += '{} | '.format(lane)
+                user_match_info += '{}/{}/{} | '.format(stat['kills'], stat['deaths'], stat['assists'])
+                user_match_info += '{}'.format(stat['totalDamageDealtToChampions'])
+                user_match_info += '\r\n'
+                break
+    discord.edit_interaction(interaction, user_match_info)
 
 
-
-CLIENT_ID = ''
-BOT_TOKEN = os.environ['']
-
-Discord.log_file = os.path.dirname(os.path.realpath(__file__)) + '\log.txt'
-discord = Discord('Match Viewer', CLIENT_ID, BOT_TOKEN)
-
-@discord.command('register', 'register a summoner or steam id', params=comms.register_params)
-def register():
-
-
+discord.open_connection()
+    
 '''
 def cs_match_history():
     ''''''
@@ -52,7 +136,7 @@ payload = {
 
 url = 'https://americas.api.riotgames.com'
 endpoint = '/lol/match/v5/matches/by-puuid/{}/ids'.format('MvWeS2jLgSphhghi1v_hIAgr7lg-HglMHONLzEwus51jDYboiTOUd6LEFsmPdoCz7OCB5AVLePjT5g')
-#endpoint = '/lol/summoner/v4/summoners/by-name/{}'.format('BlackPower9k')
+#
 endpoint = '/lol/match/v5/matches/{}'.format('NA1_4258995502')
 
 import requests
