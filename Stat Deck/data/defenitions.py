@@ -3,6 +3,7 @@ Container file for various variable definitions. Includes command paramaters as 
 api urls and endpoints.
 '''
 import os
+import re
 import json
 
 class Commands:
@@ -74,7 +75,8 @@ queue_types = {}
 with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'queue_types.json'), 'r') as f:
     queue_json = json.load(f)
     for queue in queue_json:
-        queue_types[queue['queueId']] = queue['description']
+        desc = re.sub('5v5 | games', '', str(queue['description']))
+        queue_types[queue['queueId']] = desc
 
 def user_display_name(interaction, user_id):
     '''Return user display name from id'''

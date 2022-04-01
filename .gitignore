@@ -1,5 +1,6 @@
-**/log.txt
-*.db
+*/log.txt
+Stat Deck/data/user.db
+Stat Deck/data/log.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
