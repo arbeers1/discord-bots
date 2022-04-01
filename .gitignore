@@ -1,4 +1,5 @@
-F1 To Kick/log.txt
+**/log.txt
+*.db
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
