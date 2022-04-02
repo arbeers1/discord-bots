@@ -5,6 +5,7 @@ api urls and endpoints.
 import os
 import re
 import json
+from xml.dom.minidom import Attr
 
 class Commands:
     REGISTER_PARAMS = [
@@ -78,13 +79,8 @@ with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'queue_types
     queue_json = json.load(f)
     for queue in queue_json:
         desc = re.sub('5v5 | games', '', str(queue['description']))
+        if desc == 'Ranked Solo' : desc = '5v5 Ranked'
         QUEUE_TYPES[queue['queueId']] = desc
-
-def user_display_name(interaction, user_id):
-    '''Return user display name from id'''
-    user_nick = interaction['d']['data']['resolved']['members'][user_id]['nick']
-    user = user_nick if user_nick != None else interaction['d']['data']['resolved']['users'][user_id]['username']
-    return user
 
 CS_RANKS = {
     '/1.png': 'Silver 1',
@@ -105,5 +101,25 @@ CS_RANKS = {
     '16.png': 'Legendary Eagle Master',
     '17.png': 'Supreme Master First Class',
     '18.png': 'The Global Elite',
-
 }
+
+months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+]
+
+def user_display_name(interaction, user_id):
+    '''Return user display name from id'''
+    user_nick = interaction['d']['data']['resolved']['members'][user_id]['nick']
+    user = user_nick if user_nick != None else interaction['d']['data']['resolved']['users'][user_id]['username']
+    return user

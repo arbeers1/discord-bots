@@ -49,8 +49,8 @@ def get_depth(interaction):
         depth = interaction['d']['data']['options'][1]['value']
     else:
         depth = 1
-    if depth > 10:
-        discord.reply(interaction, 'Error: Max supported depth is 10', secret_reply=True)
+    if depth > 9:
+        discord.reply(interaction, 'Error: Max supported depth is 9', secret_reply=True)
         return -1
     elif depth < 1:
         discord.reply(interaction, 'Error: Depth must be positive number 1 or greater', secret_reply=True)
@@ -84,22 +84,29 @@ def cs(interaction):
     soup = BeautifulSoup(html, 'html.parser')
 
     matches =  soup.findAll('tr', {'class': 'js-link'})
-    match_stats = '''Notice: Due to reliance on csgostats.gg matches may be missing or significantly delayed.\r\nUser {}\'s match history. depth={}\r\nDate / Map / Score / Rank / KDA / ADR\r\n'''.format(user, depth)
+    match_stats = 'Notice: Due to reliance on csgostats.gg matches may be missing or significantly delayed.\r\n'
+    match_stats += 'User {}\'s match history. depth={}\r\n'.format(user, depth)
+    match_stats += '```\r\n    Date    |     Map      |  Score  |      Rank      |    KDA   | ADR\r\n'
     for x in range(depth):
         if x >= len(matches) : break
         stats = matches[x].findAll('td')
-        match_stats += stats[0].text.strip() + ' | '
-        match_stats += stats[2].text.strip() + ' | '
-        match_stats += stats[3].text.strip() + ' | '
+        date = stats[0].text.strip()
+        for month in months:
+            date = re.sub(month + ' ..', '', date)
+        match_stats += date.center(12) + '|'
+        match_stats += stats[2].text.strip().center(14) + '|'
+        match_stats += stats[3].text.strip().center(9) + '|'
         rank = stats[4].findAll('img')
         if not rank : rank = 'Unranked'
         else:
             rank = re.findall('..\.png', str(rank[0].get('src')))
             rank = CS_RANKS[rank[0]]
-        match_stats += rank + ' | '
-        match_stats += stats[6].text.strip() + '/' + stats[7].text.strip() + '/' + stats[8].text.strip() + ' | '
-        match_stats += stats[11].text.strip()
+        match_stats += rank.center(16) + '|'
+        kda = stats[6].text.strip() + '/' + stats[7].text.strip() + '/' + stats[8].text.strip()
+        match_stats +=  kda.center(10) + '|'
+        match_stats += stats[11].text.strip().center(6)
         match_stats += '\r\n'
+    match_stats += '```'
     discord.edit_interaction(interaction, match_stats)
 
 @discord.command('lol', 'get user\'s league of legends match history', params=Commands.MATCH_PARAMS)
@@ -125,7 +132,9 @@ def lol(interaction):
     matches = http.request('get', Api.AMERICA_URL, Api.USER_MATCHES_ENDPOINT.replace('{puuid}', response['puuid']), {'api_key': Api.KEY}, None) #Get match ids
     if check(matches, interaction, summoner_id, discord) : return
 
-    user_match_info = 'Summoner {}\'s match history. depth={}\r\nWin / Game Mode / Champ / Lane / KDA / Total Champion Damage\r\n'.format(summoner_id, depth)
+    header = 'Summoner {}\'s match history. depth={}\r\n```\r\n'.format(summoner_id, depth)
+    header += ' Win |    Mode    | Lane |    Champ    |   KDA    |Chmp Dmg|CS/Min|Vis/Min\r\n'
+    user_match_info = ''
     for i in range(depth):
         if i >= len(matches) :break
 
@@ -134,19 +143,25 @@ def lol(interaction):
         for stat in response['info']['participants']:
             if stat['summonerName'] == summoner_id:
                 user_match_info += str(i+1) + ': '
-                user_match_info = user_match_info + 'Win | ' if stat['win'] else user_match_info + 'Loss | '
-                user_match_info += QUEUE_TYPES[response['info']['queueId']] + ' | '
-                user_match_info += '{} | '.format(stat['championName'])
+                user_match_info = user_match_info + 'W'.ljust(2) + '|' if stat['win'] else user_match_info + 'L'.ljust(2) + '|'
+                queue = QUEUE_TYPES[response['info']['queueId']]
+                user_match_info += queue.center(12) + '|'
                 if stat['individualPosition'] == 'JUNGLE' : lane = 'JUNG'
                 elif stat['individualPosition'] == 'Invalid' : lane = 'N/A'
                 elif stat['individualPosition'] == 'UTILITY' : lane = 'SUP'
                 else : lane = stat['individualPosition'][0:3]
-                user_match_info += '{} | '.format(lane)
-                user_match_info += '{}/{}/{} | '.format(stat['kills'], stat['deaths'], stat['assists'])
-                user_match_info += '{:,}'.format(stat['totalDamageDealtToChampions'])
+                user_match_info += lane.center(6) + '|'
+                user_match_info += stat['championName'].center(13) + '|'
+                user_match_info += '{}/{}/{}'.format(stat['kills'], stat['deaths'], stat['assists']).center(10) + '|'
+                user_match_info += '{:,}'.format(stat['totalDamageDealtToChampions']).center(8) + '|'
+                cs_per_minute = str(round(stat['totalMinionsKilled'] / (response['info']['gameDuration'] / 60), 2))
+                user_match_info += cs_per_minute.center(6) + '|'
+                try:
+                    vision_per_min = str(round(stat['challenges']['visionScorePerMinute'], 2))
+                except KeyError: vision_per_min = 'N/A'
+                user_match_info += vision_per_min.center(6)
                 user_match_info += '\r\n'
                 break
-    discord.edit_interaction(interaction, user_match_info)
-
+    discord.edit_interaction(interaction, header  + user_match_info + '```')
 
 discord.open_connection()

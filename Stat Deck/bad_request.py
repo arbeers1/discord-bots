@@ -8,5 +8,5 @@ def check(response, interaction, summoner_id, discord):
         discord.edit_interaction(interaction, 'Rate Limit Exceeded. Please try again later.')
         return True
     else:
-        discord.edit_interaction(interaction, 'While processing your request a {} error was encountered. The error has been logged.')
+        discord.edit_interaction(interaction, 'While processing your request a {} error was encountered. The error has been logged.'.format(response))
         return True
